@@ -2,12 +2,20 @@ package routes
 
 import (
 	"fmt"
+	"microsms/helpers"
 	"microsms/models"
 	"net/http"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 )
+
+var filterWG *sync.WaitGroup
+
+func SetFilterWaitGroup(wg *sync.WaitGroup) {
+	filterWG = wg
+}
 
 func CreateSMSRequest(c *gin.Context) {
 	var smsrequest models.SMSRequest
@@ -19,6 +27,9 @@ func CreateSMSRequest(c *gin.Context) {
 		c.JSON(http.StatusFailedDependency, gin.H{"error": err.Error()})
 		return
 	}
+	filterWG.Add(1)                                               // increment the waitgroup or else our app won't know of new potential goroutine
+	go helpers.CheckSMSMessage(smsrequest.ID, smsrequest.Message) // Execute the CheckSMSMessage in parallel non blocking manner
+
 	c.JSON(http.StatusCreated, gin.H{"message": fmt.Sprintf("SMSRequest Created %s", smsrequest.ID), "smsrequest": smsrequest})
 }
 

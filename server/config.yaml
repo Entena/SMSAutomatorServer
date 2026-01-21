@@ -1,0 +1,16 @@
+# Core server configuration
+# Allows you to expose ports
+server:
+  port: "8080"
+  host: "0.0.0.0"
+
+# Database configuration
+database:
+  path: "smsrequest.DB"
+
+# Configurations for how to use Filter API
+filter:
+  enabled: true # Turns on or off usage of the filter API
+  apiurl: "http://192.168.8.100:8000/api/filter/sms" # point me to your filter API
+  maxconcurrent: 5 # max concurrent filter requests (just simple throttling)
+  resultchansize: 10 # set size of the result channel (think of it as how many results can run at once)

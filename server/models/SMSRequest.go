@@ -21,11 +21,12 @@ const (
 	TAKEN         RequestStatus = "taken"
 	SENT          RequestStatus = "sent"
 	ERROR         RequestStatus = "error"
+	BLOCKED       RequestStatus = "blocked"
 )
 
 // Enums don't necessarily restrict input
 func IsValidStatus(status string) bool {
-	if status != "payment_owed" && status != "ready_to_send" && status != "taken" && status != "sent" && status != "error" {
+	if status != "payment_owed" && status != "ready_to_send" && status != "taken" && status != "sent" && status != "error" && status != "blocked" {
 		return false
 	}
 	return true
@@ -125,9 +126,10 @@ func GetEarliestSMSRequest() (*SMSRequest, error) {
 }
 
 // Create DB connection
-func InitDB() (*gorm.DB, error) {
-	fmt.Println("Initing DB")
-	db, err := gorm.Open(sqlite.Open("smsrequest.DB"), &gorm.Config{})
+// TODO use psql in the future and set up support for it
+func InitDB(dbPath string) (*gorm.DB, error) {
+	fmt.Printf("Initing DB with dbPath %s\n", dbPath)
+	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
