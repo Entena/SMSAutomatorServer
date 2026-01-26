@@ -1,0 +1,72 @@
+version: '3.8'
+
+services:
+  # SMS Filter Service - Python/FastAPI backend
+  smsfilter:
+    build:
+      context: ./smsfilter
+      dockerfile: Dockerfile
+    container_name: smsfilter-backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - ./smsfilter/.env
+    environment:
+      - HF_HOME=/app/.cache/huggingface
+      - UID=10001
+      - GID=10001
+      - APP_DIR=/app
+    networks:
+      - microsms-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/filter/sms"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # MicroSMS Server - Go/Gin backend
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+      args:
+        # Set BUILD_WITH_DB to "true" if you want to include existing database
+        # Leave empty to start with fresh database
+        BUILD_WITH_DB: ""
+    container_name: microsms-server
+    ports:
+      - "8080:8080"
+    environment:
+      # Server configuration
+      - MICROSMS_SERVER_PORT=8080
+      - MICROSMS_SERVER_HOST=0.0.0.0
+      - MICROSMS_DATABASE_PATH=/app/data/smsrequest.db
+      # Filter API configuration
+      - MICROSMS_FILTER_APIURL=http://smsfilter:8000/api/filter/sms
+      - MICROSMS_FILTER_MAXCONCURRENT=5
+      - MICROSMS_FILTER_RESULTCHANSIZE=10
+    volumes:
+      # Persist database across container restarts
+      - server-data:/app/data
+      # Optionally mount config for easy editing
+      - ./server/config.yaml:/app/config.yaml:ro
+    networks:
+      - microsms-network
+    depends_on:
+      smsfilter:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/api/v0/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+networks:
+  microsms-network:
+    driver: bridge
+
+volumes:
+  server-data:
+    driver: local
