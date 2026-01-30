@@ -141,10 +141,11 @@ func UpdatePhoneOptIn(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Invalid phone number %s", err)})
 		return
 	}
-	optinupdated, err := models.UpdateOptIn(optinupdate.Number, optinupdate.Status)
+	// Check our optin against the message we got
+	optIn, err := models.UpdateOptInAndRequestsIfAuthD(optinupdate.Number, optinupdate.Codeword)
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Failed updating OptIn %s", err)})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"message": "OptIn updated", "optin": optinupdated})
+	c.JSON(http.StatusOK, gin.H{"message": "OptIn updated", "optin": optIn})
 }

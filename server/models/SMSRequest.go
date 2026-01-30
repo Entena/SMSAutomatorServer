@@ -6,20 +6,23 @@ import (
 	"microsms/constants"
 
 	"github.com/google/uuid"
-	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )
 
-var DB *gorm.DB // Global DB pointer
-
 // SMSRequest definition
 type SMSRequest struct {
-	ID         uuid.UUID               `json:"id" gorm:"primary_key"`
-	ToNumber   string                  `json:"to_number" gorm:"not null"`
-	FromNumber string                  `json:"from_number" gorm:"not null"`
-	Status     constants.RequestStatus `json:"status"`
-	Message    string                  `json:"message"`
-	Created    int64                   `json:"created" gorm:"autoCreateTime"`
+	ID          uuid.UUID               `json:"id" gorm:"primary_key"`
+	ToNumber    string                  `json:"to_number" gorm:"not null"`
+	ToOptInID   uuid.UUID               `gorm:"index:toOpt_index;not null"`
+	FromOptInID uuid.UUID               `gorm:"index:fromOpt_index;not null"`
+	FromNumber  string                  `json:"from_number" gorm:"not null"`
+	Status      constants.RequestStatus `json:"status"`
+	Message     string                  `json:"message"`
+	Created     int64                   `json:"created" gorm:"autoCreateTime"`
+
+	// Define the association to OptIn
+	ToOptIn   OptIn `gorm:"references:ID"`
+	FromOptIn OptIn `gorm:"references:ID"`
 }
 
 // This should never happen, but hey if it does we can at least log something
@@ -48,27 +51,33 @@ func (smsrequest SMSRequest) String() string {
 
 // Good old precreate hook to populate the id
 func (smsrequest *SMSRequest) BeforeCreate(tx *gorm.DB) error {
+	var err error
+	var fNumberF, tNumberF string
+	var fromOptIn, toOptIn *OptIn
+	// Fetch our request auth to check status
+	// validate our phone numbers
+	if fNumberF, err = constants.GetPhone(smsrequest.FromNumber); err != nil {
+		return fmt.Errorf("Error invalid from phone number %s", smsrequest.FromNumber)
+	}
+	if tNumberF, err = constants.GetPhone(smsrequest.ToNumber); err != nil {
+		return fmt.Errorf("Error invalid to phone number %s", smsrequest.ToNumber)
+	}
 	smsrequest.ID = uuid.New()
-	// First we need to check that the numbers are ok
-	smsrequest.Status = constants.RequestStatus_VERIFY_CHECK
-	// Create the RequestAuth entry, fail in same txn if either can't be made
-	requestAuth := RequestAuth{
-		RequestID: smsrequest.ID,            // dupe data because each request is a session to contact
-		From:      smsrequest.FromNumberF(), //Get formatted data for request auth
-		To:        smsrequest.ToNumberF(),
+	if fromOptIn, err = FindOrCreateOptIn(fNumberF); err != nil {
+		return fmt.Errorf("Error with from opt in %s", err)
 	}
-	err := DB.Create(&requestAuth).Error
-	if err != nil {
-		return err
+	if toOptIn, err = FindOrCreateOptIn(tNumberF); err != nil {
+		return fmt.Errorf("Error with to opt in %s", err)
 	}
-	// Check our request auth status to see if we are naughty
-	// cascade our status up
-	if requestAuth.Status == constants.RequestAuthStatus_DENIED {
+	smsrequest.ToOptInID = toOptIn.ID
+	smsrequest.FromOptInID = fromOptIn.ID
+	// Check all of our opt in statuses to determine initial request status
+	if fromOptIn.Status == constants.OptInStatus_FALSE || toOptIn.Status == constants.OptInStatus_FALSE {
 		smsrequest.Status = constants.RequestStatus_BLOCKED
-	} else if requestAuth.Status == constants.RequestAuthStatus_READY {
-		smsrequest.Status = constants.RequestStatus_READY_TO_SEND
-	} else {
+	} else if fromOptIn.Status == constants.OptInStatus_ASK || toOptIn.Status == constants.OptInStatus_ASK {
 		smsrequest.Status = constants.RequestStatus_VERIFY_CHECK
+	} else if fromOptIn.Status == constants.OptInStatus_TRUE && toOptIn.Status == constants.OptInStatus_TRUE {
+		smsrequest.Status = constants.RequestStatus_READY_TO_SEND
 	}
 
 	return nil
@@ -141,18 +150,7 @@ func GetEarliestSMSRequest() (*SMSRequest, error) {
 	return &earliest, nil
 }
 
-// Create DB connection
-// TODO use psql in the future and set up support for it
-func InitDB(dbPath string) (*gorm.DB, error) {
-	fmt.Printf("Initing DB with dbPath %s\n", dbPath)
-	db, err := gorm.Open(sqlite.Open(dbPath), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-	DB = db
-	DB.AutoMigrate(&SMSRequest{}) // create the reqeuest table
-	DB.AutoMigrate(&RequestAuth{})
-	DB.AutoMigrate(&OptIn{})
-	fmt.Println("DB Inited")
-	return DB, nil
+// Based on the optin status
+func UpdateSMSRequestStatusForNumber(optin *OptIn) {
+
 }

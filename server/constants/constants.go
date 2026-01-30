@@ -1,7 +1,9 @@
 package constants
 
 import (
+	"crypto/rand"
 	"fmt"
+	"math/big"
 	"regexp"
 )
 
@@ -79,4 +81,19 @@ func IsValidPhone(number string) bool {
 	var phoneRegex = `^(?:\(\d{3}\)|\d{3})[-. ]?\d{3}[-. ]?\d{4}$`
 	re := regexp.MustCompile(phoneRegex)
 	return re.MatchString(number)
+}
+
+func GenerateCodePhrase() string {
+	chars := []rune("ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
+	b := make([]rune, 10)
+	for i := range b {
+		n, err := rand.Int(rand.Reader, big.NewInt(int64(len(chars))))
+		if err != nil {
+			return "ERRORCODE"
+		}
+		b[i] = chars[n.Int64()]
+	}
+
+	return string(b)
 }
